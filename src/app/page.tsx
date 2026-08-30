@@ -23,6 +23,7 @@ import { RoomDetailDialog } from "@/components/site/room-detail-dialog";
 import { ManageBookingDialog } from "@/components/manage/manage-booking-dialog";
 import { FloatingActions } from "@/components/site/floating-actions";
 import { AdminPanel } from "@/components/site/admin-panel";
+import { AppShell } from "@/components/app/app-shell";
 
 export default function Home() {
   return (
@@ -54,6 +55,8 @@ export default function Home() {
       <ManageBookingDialog />
       <FloatingActions />
       <AdminPanel />
+      {/* Hotel Mobile App (Guest / Reception / Admin) */}
+      <AppShell />
     </div>
   );
 }

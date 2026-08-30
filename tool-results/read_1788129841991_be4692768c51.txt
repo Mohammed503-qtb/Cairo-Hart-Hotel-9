@@ -1,0 +1,868 @@
+     1→// Hotel Website + Booking Engine — Domain Schema
+     2→// Single SQLite database, website-only scope per PLAN_WEBSITE.md
+     3→
+     4→generator client {
+     5→  provider = "prisma-client-js"
+     6→}
+     7→
+     8→datasource db {
+     9→  provider = "sqlite"
+    10→  url      = env("DATABASE_URL")
+    11→}
+    12→
+    13→// ---------------------------------------------------------------------------
+    14→// Hotel configuration (single active record)
+    15→// ---------------------------------------------------------------------------
+    16→model Hotel {
+    17→  id              String   @id @default(cuid())
+    18→  slug            String   @unique @default("default")
+    19→  nameAr          String
+    20→  nameEn          String
+    21→  taglineAr       String
+    22→  taglineEn       String
+    23→  descriptionAr   String
+    24→  descriptionEn   String
+    25→  storyAr         String?
+    26→  storyEn         String?
+    27→  phone           String
+    28→  whatsapp        String?
+    29→  email           String
+    30→  addressAr       String
+    31→  addressEn       String
+    32→  cityAr          String
+    33→  cityEn          String
+    34→  countryAr       String
+    35→  countryEn       String
+    36→  latitude        Float?
+    37→  longitude       Float?
+    38→  checkInTime     String   @default("14:00")
+    39→  checkOutTime    String   @default("12:00")
+    40→  currency        String   @default("YER")
+    41→  timezone        String   @default("Asia/Aden")
+    42→  defaultLanguage String   @default("ar")
+    43→  logoUrl         String?
+    44→  heroImageUrl    String?
+    45→  bookingHorizonDays Int   @default(365)
+    46→  minStayNights   Int      @default(1)
+    47→  maxStayNights   Int      @default(30)
+    48→  maxAdultsPerRoom Int     @default(4)
+    49→  maxChildrenPerRoom Int   @default(3)
+    50→  taxRatePercent  Float    @default(5.0) // service tax
+    51→  serviceChargePercent Float @default(2.0)
+    52→  whatsappEnabled Boolean  @default(false)
+    53→  emailEnabled    Boolean  @default(true)
+    54→  createdAt       DateTime @default(now())
+    55→  updatedAt       DateTime @updatedAt
+    56→
+    57→  roomTypes       RoomType[]
+    58→  facilities      Facility[]
+    59→  galleryItems    GalleryItem[]
+    60→  offers          Offer[]
+    61→  policies        Policy[]
+    62→  faqs            Faq[]
+    63→  reviews         Review[]
+    64→}
+    65→
+    66→// ---------------------------------------------------------------------------
+    67→// Rooms
+    68→// ---------------------------------------------------------------------------
+    69→model RoomType {
+    70→  id              String   @id @default(cuid())
+    71→  slug            String   @unique
+    72→  nameAr          String
+    73→  nameEn          String
+    74→  descriptionAr   String
+    75→  descriptionEn   String
+    76→  shortDescriptionAr String
+    77→  shortDescriptionEn String
+    78→  basePrice       Float    // per night, base currency
+    79→  sizeSqm         Float?
+    80→  bedConfigAr     String
+    81→  bedConfigEn     String
+    82→  maxAdults       Int      @default(2)
+    83→  maxChildren     Int      @default(2)
+    84→  totalInventory  Int      @default(1) // number of physical rooms of this type
+    85→  imageUrl        String
+    86→  images          RoomTypeImage[]
+    87→  amenities       RoomTypeAmenity[]
+    88→  ratePlanId      String?
+    89→  ratePlan        RatePlan? @relation(fields: [ratePlanId], references: [id])
+    90→  seasonalRates   SeasonalRate[]
+    91→  isActive        Boolean  @default(true)
+    92→  isFeatured      Boolean  @default(false)
+    93→  displayOrder    Int      @default(0)
+    94→  createdAt       DateTime @default(now())
+    95→  updatedAt       DateTime @updatedAt
+    96→  hotelId         String
+    97→  hotel           Hotel    @relation(fields: [hotelId], references: [id])
+    98→
+    99→  reservations    ReservationItem[]
+   100→  physicalRooms  PhysicalRoom[]
+   101→
+   102→  @@index([hotelId])
+   103→  @@index([isActive])
+   104→}
+   105→
+   106→model RoomTypeImage {
+   107→  id          String   @id @default(cuid())
+   108→  roomTypeId  String
+   109→  roomType    RoomType @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+   110→  url         String
+   111→  altAr       String?
+   112→  altEn       String?
+   113→  displayOrder Int     @default(0)
+   114→  createdAt   DateTime @default(now())
+   115→
+   116→  @@index([roomTypeId])
+   117→}
+   118→
+   119→model Amenity {
+   120→  id          String   @id @default(cuid())
+   121→  slug        String   @unique
+   122→  nameAr      String
+   123→  nameEn      String
+   124→  iconKey     String?
+   125→  roomTypes   RoomTypeAmenity[]
+   126→}
+   127→
+   128→model RoomTypeAmenity {
+   129→  roomTypeId  String
+   130→  amenityId   String
+   131→  roomType    RoomType @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+   132→  amenity     Amenity  @relation(fields: [amenityId], references: [id], onDelete: Cascade)
+   133→
+   134→  @@id([roomTypeId, amenityId])
+   135→}
+   136→
+   137→// ---------------------------------------------------------------------------
+   138→// Rate plans
+   139→// ---------------------------------------------------------------------------
+   140→model RatePlan {
+   141→  id              String   @id @default(cuid())
+   142→  nameAr          String
+   143→  nameEn          String
+   144→  descriptionAr   String?
+   145→  descriptionEn   String?
+   146→  isRefundable    Boolean  @default(true)
+   147→  cancellationDays Int    @default(3) // free cancellation if X days before check-in
+   148→  prepayPercent   Float    @default(0) // 0 = pay at hotel, 100 = prepay, 50 = deposit
+   149→  isActive        Boolean  @default(true)
+   150→  roomTypes       RoomType[]
+   151→  seasonalRates   SeasonalRate[]
+   152→  createdAt       DateTime @default(now())
+   153→  updatedAt       DateTime @updatedAt
+   154→}
+   155→
+   156→// Seasonal / weekend rate adjustments — applied on top of base price
+   157→model SeasonalRate {
+   158→  id              String   @id @default(cuid())
+   159→  nameAr          String
+   160→  nameEn          String
+   161→  roomTypeId      String?  // null = applies to all room types
+   162→  roomType        RoomType? @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+   163→  ratePlanId      String?  // null = applies to all rate plans
+   164→  ratePlan        RatePlan? @relation(fields: [ratePlanId], references: [id], onDelete: Cascade)
+   165→  startDate       DateTime // season start (inclusive)
+   166→  endDate         DateTime // season end (inclusive)
+   167→  adjustmentType  String   @default("PERCENTAGE") // PERCENTAGE or FIXED
+   168→  adjustmentValue Float    // e.g. 20 = +20%, -10 = -10%, or fixed amount
+   169→  // Weekend surcharge (applied on Fri/Sat for Yemen weekend)
+   170→  weekendAdjustmentType String? // PERCENTAGE or FIXED
+   171→  weekendAdjustmentValue Float?
+   172→  weekendDays     String   @default("5,6") // 0=Sun,5=Fri,6=Sat (comma-separated)
+   173→  isActive        Boolean  @default(true)
+   174→  priority        Int      @default(0) // higher priority wins when overlapping
+   175→  minStayNights   Int?     // optional: override hotel min stay during this season
+   176→  maxStayNights   Int?     // optional: override hotel max stay during this season
+   177→  createdAt       DateTime @default(now())
+   178→  updatedAt       DateTime @updatedAt
+   179→
+   180→  @@index([roomTypeId])
+   181→  @@index([ratePlanId])
+   182→  @@index([startDate, endDate])
+   183→  @@index([isActive])
+   184→}
+   185→
+   186→// ---------------------------------------------------------------------------
+   187→// Facilities / Gallery / Offers / Policies / FAQ
+   188→// ---------------------------------------------------------------------------
+   189→model Facility {
+   190→  id          String   @id @default(cuid())
+   191→  slug        String   @unique
+   192→  nameAr      String
+   193→  nameEn      String
+   194→  descriptionAr String
+   195→  descriptionEn String
+   196→  imageUrl    String?
+   197→  hoursAr     String?
+   198→  hoursEn     String?
+   199→  iconKey     String?
+   200→  isActive    Boolean  @default(true)
+   201→  displayOrder Int     @default(0)
+   202→  hotelId     String
+   203→  hotel       Hotel    @relation(fields: [hotelId], references: [id])
+   204→  createdAt   DateTime @default(now())
+   205→  updatedAt   DateTime @updatedAt
+   206→
+   207→  @@index([hotelId])
+   208→}
+   209→
+   210→model GalleryItem {
+   211→  id          String   @id @default(cuid())
+   212→  url         String
+   213→  altAr       String
+   214→  altEn       String
+   215→  category    String   @default("general") // exterior, rooms, facilities, surroundings
+   216→  captionAr   String?
+   217→  captionEn   String?
+   218→  displayOrder Int     @default(0)
+   219→  hotelId     String
+   220→  hotel       Hotel    @relation(fields: [hotelId], references: [id])
+   221→  createdAt   DateTime @default(now())
+   222→
+   223→  @@index([hotelId])
+   224→  @@index([category])
+   225→}
+   226→
+   227→model Offer {
+   228→  id          String   @id @default(cuid())
+   229→  slug        String   @unique
+   230→  titleAr     String
+   231→  titleEn     String
+   232→  descriptionAr String
+   233→  descriptionEn String
+   234→  imageUrl    String?
+   235→  discountPercent Float?
+   236→  validFrom   DateTime
+   237→  validTo     DateTime
+   238→  isActive    Boolean  @default(true)
+   239→  termsAr     String?
+   240→  termsEn     String?
+   241→  hotelId     String
+   242→  hotel       Hotel    @relation(fields: [hotelId], references: [id])
+   243→  createdAt   DateTime @default(now())
+   244→  updatedAt   DateTime @updatedAt
+   245→
+   246→  @@index([hotelId])
+   247→  @@index([isActive])
+   248→}
+   249→
+   250→model Policy {
+   251→  id          String   @id @default(cuid())
+   252→  slug        String   @unique
+   253→  category    String   // checkin, checkout, cancellation, noshow, payment, children, smoking, pets, etc.
+   254→  titleAr     String
+   255→  titleEn     String
+   256→  bodyAr      String
+   257→  bodyEn      String
+   258→  displayOrder Int     @default(0)
+   259→  hotelId     String
+   260→  hotel       Hotel    @relation(fields: [hotelId], references: [id])
+   261→  createdAt   DateTime @default(now())
+   262→  updatedAt   DateTime @updatedAt
+   263→
+   264→  @@index([hotelId])
+   265→  @@index([category])
+   266→}
+   267→
+   268→model Faq {
+   269→  id          String   @id @default(cuid())
+   270→  category    String   @default("general")
+   271→  questionAr  String
+   272→  questionEn  String
+   273→  answerAr    String
+   274→  answerEn    String
+   275→  displayOrder Int     @default(0)
+   276→  hotelId     String
+   277→  hotel       Hotel    @relation(fields: [hotelId], references: [id])
+   278→  createdAt   DateTime @default(now())
+   279→
+   280→  @@index([hotelId])
+   281→  @@index([category])
+   282→}
+   283→
+   284→model Review {
+   285→  id          String   @id @default(cuid())
+   286→  guestName   String
+   287→  guestCountry String  @default("YE")
+   288→  roomTypeSlug String? // optional link to a room type
+   289→  rating      Float    // 1-5, supports half stars
+   290→  titleAr     String?
+   291→  titleEn     String?
+   292→  bodyAr      String
+   293→  bodyEn      String
+   294→  stayDate    DateTime? // month/year of guest's stay
+   295→  isPublished Boolean  @default(true)
+   296→  isFeatured  Boolean  @default(true)
+   297→  source      String   @default("WEBSITE") // WEBSITE, BOOKING_COM, GOOGLE
+   298→  displayOrder Int     @default(0)
+   299→  hotelId     String
+   300→  hotel       Hotel    @relation(fields: [hotelId], references: [id])
+   301→  createdAt   DateTime @default(now())
+   302→
+   303→  @@index([hotelId])
+   304→  @@index([isFeatured])
+   305→  @@index([isPublished])
+   306→}
+   307→
+   308→model Newsletter {
+   309→  id          String   @id @default(cuid())
+   310→  email       String   @unique
+   311→  name        String?
+   312→  locale      String   @default("ar")
+   313→  isActive    Boolean  @default(true)
+   314→  confirmedAt DateTime? // null until user confirms via email link
+   315→  unsubscribedAt DateTime?
+   316→  source      String   @default("WEBSITE_FOOTER")
+   317→  createdAt   DateTime @default(now())
+   318→  updatedAt   DateTime @updatedAt
+   319→}
+   320→
+   321→model PromoCode {
+   322→  id              String   @id @default(cuid())
+   323→  code            String   @unique
+   324→  nameAr          String
+   325→  nameEn          String
+   326→  descriptionAr   String?
+   327→  descriptionEn   String?
+   328→  discountType    String   @default("PERCENTAGE") // PERCENTAGE or FIXED
+   329→  discountValue   Float    // e.g. 15 = 15% off, or 5000 = 5000 YER off
+   330→  maxUses         Int      @default(100) // 0 = unlimited
+   331→  usedCount       Int      @default(0)
+   332→  validFrom       DateTime
+   333→  validTo         DateTime
+   334→  isActive        Boolean  @default(true)
+   335→  createdAt       DateTime @default(now())
+   336→  updatedAt       DateTime @updatedAt
+   337→}
+   338→
+   339→// ---------------------------------------------------------------------------
+   340→// Guests & Reservations
+   341→// ---------------------------------------------------------------------------
+   342→model Guest {
+   343→  id          String   @id @default(cuid())
+   344→  fullName    String
+   345→  phone       String
+   346→  email       String?
+   347→  countryCode String   @default("+967")
+   348→  whatsapp    String?
+   349→  createdAt   DateTime @default(now())
+   350→  updatedAt   DateTime @updatedAt
+   351→  reservations Reservation[]
+   352→  stays       Stay[]
+   353→
+   354→  @@index([phone])
+   355→  @@index([email])
+   356→}
+   357→
+   358→model Reservation {
+   359→  id              String   @id @default(cuid())
+   360→  bookingReference String  @unique
+   361→  hotelId         String
+   362→  guestId        String
+   363→  guest           Guest    @relation(fields: [guestId], references: [id])
+   364→  status          String   @default("PENDING") // PENDING, CONFIRMED, PAYMENT_PENDING, CANCELLED, FAILED, EXPIRED, NO_SHOW
+   365→  source          String   @default("WEBSITE")
+   366→  checkIn         DateTime
+   367→  checkOut        DateTime
+   368→  nights          Int
+   369→  adults          Int      @default(1)
+   370→  children        Int      @default(0)
+   371→  rooms           Int      @default(1)
+   372→  currency        String   @default("YER")
+   373→  subtotal        Float
+   374→  discountTotal   Float    @default(0)
+   375→  taxTotal        Float    @default(0)
+   376→  serviceChargeTotal Float @default(0)
+   377→  grandTotal      Float
+   378→  paidTotal       Float    @default(0)
+   379→  paymentStatus   String   @default("UNPAID") // UNPAID, PARTIAL, PAID, REFUNDED
+   380→  paymentMethod   String?  // PAY_AT_HOTEL, PAY_ONLINE, DEPOSIT
+   381→  specialRequest  String?
+   382→  policySnapshot  String   // JSON snapshot of relevant policies at booking time
+   383→  idempotencyKey  String?  @unique
+   384→  confirmedAt     DateTime?
+   385→  cancelledAt     DateTime?
+   386→  cancellationReason String?
+   387→  createdAt       DateTime @default(now())
+   388→  updatedAt       DateTime @updatedAt
+   389→
+   390→  items           ReservationItem[]
+   391→  priceSnapshot   ReservationPriceSnapshot[]
+   392→  payments        Payment[]
+   393→  modifications   BookingModification[]
+   394→  notifications   Notification[]
+   395→  stays           Stay[]
+   396→
+   397→  @@index([guestId])
+   398→  @@index([status])
+   399→  @@index([checkIn])
+   400→  @@index([bookingReference])
+   401→}
+   402→
+   403→model ReservationItem {
+   404→  id              String   @id @default(cuid())
+   405→  reservationId   String
+   406→  reservation     Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+   407→  roomTypeId      String
+   408→  roomType        RoomType @relation(fields: [roomTypeId], references: [id])
+   409→  quantity        Int      @default(1)
+   410→  checkIn         DateTime
+   411→  checkOut         DateTime
+   412→  nights          Int
+   413→  nightlyRate     Float
+   414→  subtotal        Float
+   415→
+   416→  @@index([reservationId])
+   417→  @@index([roomTypeId])
+   418→}
+   419→
+   420→model ReservationPriceSnapshot {
+   421→  id              String   @id @default(cuid())
+   422→  reservationId   String
+   423→  reservation     Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+   424→  nightDate       DateTime
+   425→  roomTypeId      String
+   426→  baseRate        Float
+   427→  discount        Float    @default(0)
+   428→  tax             Float    @default(0)
+   429→  serviceCharge   Float    @default(0)
+   430→  total           Float
+   431→  currency        String
+   432→
+   433→  @@index([reservationId])
+   434→}
+   435→
+   436→model Payment {
+   437→  id              String   @id @default(cuid())
+   438→  reservationId   String
+   439→  reservation     Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+   440→  provider        String   @default("manual") // manual, stripe (future), etc.
+   441→  method          String   // PAY_AT_HOTEL, PAY_ONLINE, DEPOSIT
+   442→  amount          Float
+   443→  currency        String
+   444→  status          String   @default("PENDING") // PENDING, SUCCEEDED, FAILED, REFUNDED
+   445→  providerReference String?
+   446→  idempotencyKey  String?  @unique
+   447→  createdAt       DateTime @default(now())
+   448→  completedAt     DateTime?
+   449→  failedAt        DateTime?
+   450→
+   451→  @@index([reservationId])
+   452→  @@index([status])
+   453→}
+   454→
+   455→model BookingModification {
+   456→  id              String   @id @default(cuid())
+   457→  reservationId   String
+   458→  reservation     Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+   459→  changeType      String   // DATES, GUESTS, ROOM_TYPE, CONTACT, CANCEL
+   460→  previousValue   String   // JSON
+   461→  newValue        String   // JSON
+   462→  reason          String?
+   463→  performedBy     String   @default("GUEST")
+   464→  createdAt       DateTime @default(now())
+   465→
+   466→  @@index([reservationId])
+   467→}
+   468→
+   469→model Notification {
+   470→  id              String   @id @default(cuid())
+   471→  reservationId   String
+   472→  reservation     Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+   473→  channel         String   // WHATSAPP, EMAIL
+   474→  type            String   // BOOKING_CONFIRMED, BOOKING_CANCELLED, BOOKING_MODIFIED
+   475→  status          String   @default("PENDING") // PENDING, SENT, FAILED
+   476→  recipient       String
+   477→  content         String
+   478→  providerReference String?
+   479→  attemptCount    Int      @default(0)
+   480→  createdAt       DateTime @default(now())
+   481→  sentAt          DateTime?
+   482→  failedAt        DateTime?
+   483→
+   484→  @@index([reservationId])
+   485→}
+   486→
+   487→model AuditLog {
+   488→  id              String   @id @default(cuid())
+   489→  action          String
+   490→  entityType      String
+   491→  entityId        String
+   492→  performedBy     String   @default("SYSTEM")
+   493→  details         String   // JSON
+   494→  createdAt       DateTime @default(now())
+   495→
+   496→  @@index([entityType, entityId])
+   497→  @@index([action])
+   498→}
+   499→
+   500→// ===========================================================================
+   501→// MOBILE APP DOMAIN — Stays, Physical Rooms, Access Codes, Requests, Billing,
+   502→// Conversations, Staff, Services. See PLAN_ MOBILE-APK.md.
+   503→// Single source of truth shared with the website. App personas (Guest/Reception/Admin)
+   504→// authenticate via dynamic access codes; sessions are tracked in GuestSession.
+   505→// ===========================================================================
+   506→
+   507→// --- Staff (Reception / Admin / Master Admin) ---------------------------
+   508→model Staff {
+   509→  id              String   @id @default(cuid())
+   510→  fullName        String
+   511→  phone           String   @unique
+   512→  email           String?
+   513→  role            String   @default("RECEPTION") // RECEPTION | ADMIN | MASTER_ADMIN
+   514→  isActive        Boolean  @default(true)
+   515→  accessCodes     AccessCode[]
+   516→  sessions        GuestSession[]
+   517→  createdAt       DateTime @default(now())
+   518→  updatedAt       DateTime @updatedAt
+   519→
+   520→  @@index([role])
+   521→}
+   522→
+   523→// --- Physical rooms (room numbers) --------------------------------------
+   524→model PhysicalRoom {
+   525→  id              String   @id @default(cuid())
+   526→  roomNumber      String   @unique // e.g. "101"
+   527→  floor           Int
+   528→  roomTypeId      String
+   529→  roomType        RoomType @relation(fields: [roomTypeId], references: [id])
+   530→  status          String   @default("AVAILABLE") // AVAILABLE | RESERVED | OCCUPIED | DIRTY | CLEANING | CLEAN | INSPECTED | OUT_OF_ORDER | OUT_OF_SERVICE
+   531→  notes           String?
+   532→  stays           Stay[]
+   533→  transfersFrom   RoomTransferRequest[] @relation("TransferFromRoom")
+   534→  transfersTo     RoomTransferRequest[] @relation("TransferToRoom")
+   535→  statusHistory   RoomStatusHistory[]
+   536→  createdAt       DateTime @default(now())
+   537→  updatedAt       DateTime @updatedAt
+   538→
+   539→  @@index([floor])
+   540→  @@index([status])
+   541→  @@index([roomTypeId])
+   542→}
+   543→
+   544→model RoomStatusHistory {
+   545→  id              String   @id @default(cuid())
+   546→  roomId          String
+   547→  room            PhysicalRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+   548→  fromStatus      String?
+   549→  toStatus        String
+   550→  reason          String?
+   551→  changedBy       String   @default("SYSTEM")
+   552→  createdAt       DateTime @default(now())
+   553→
+   554→  @@index([roomId])
+   555→}
+   556→
+   557→// --- Stay (active hotel occupancy after check-in) ----------------------
+   558→model Stay {
+   559→  id              String   @id @default(cuid())
+   560→  stayNumber      String   @unique // ST-YYYY-NNNNNN
+   561→  reservationId   String?
+   562→  reservation     Reservation? @relation(fields: [reservationId], references: [id])
+   563→  guestId         String
+   564→  guest           Guest    @relation(fields: [guestId], references: [id])
+   565→  roomId          String
+   566→  room            PhysicalRoom @relation(fields: [roomId], references: [id])
+   567→  hotelId         String
+   568→  checkIn         DateTime
+   569→  checkOut        DateTime
+   570→  nights          Int
+   571→  adults          Int      @default(1)
+   572→  children        Int      @default(0)
+   573→  status          String   @default("EXPECTED") // EXPECTED | CHECKED_IN | CHECKED_OUT | CLOSED
+   574→  balance         Float    @default(0)
+   575→  notes           String?
+   576→  checkedInAt     DateTime?
+   577→  checkedOutAt    DateTime?
+   578→  closedAt        DateTime?
+   579→  accessCodes     AccessCode[]
+   580→  requests        GuestRequest[]
+   581→  charges         Charge[]
+   582→  conversations   Conversation[]
+   583→  extensionReqs   ExtensionRequest[]
+   584→  transferReqs    RoomTransferRequest[]
+   585→  checkoutReqs    CheckoutRequest[]
+   586→  statusHistory   StayStatusHistory[]
+   587→  createdAt       DateTime @default(now())
+   588→  updatedAt       DateTime @updatedAt
+   589→
+   590→  @@index([guestId])
+   591→  @@index([roomId])
+   592→  @@index([status])
+   593→  @@index([checkIn])
+   594→  @@index([hotelId])
+   595→}
+   596→
+   597→model StayStatusHistory {
+   598→  id              String   @id @default(cuid())
+   599→  stayId          String
+   600→  stay            Stay     @relation(fields: [stayId], references: [id], onDelete: Cascade)
+   601→  fromStatus      String?
+   602→  toStatus        String
+   603→  reason          String?
+   604→  changedBy       String   @default("SYSTEM")
+   605→  createdAt       DateTime @default(now())
+   606→
+   607→  @@index([stayId])
+   608→}
+   609→
+   610→// --- Access codes (Guest / Reception / Admin) ---------------------------
+   611→model AccessCode {
+   612→  id              String   @id @default(cuid())
+   613→  codeHash        String   @unique // SHA-256 hex of raw code
+   614→  codeType        String   // GUEST | RECEPTION | ADMIN
+   615→  // GUEST: stayId + guestId + roomId bound; RECEPTION/ADMIN: staffId bound
+   616→  stayId          String?
+   617→  stay            Stay?    @relation(fields: [stayId], references: [id])
+   618→  guestId         String?
+   619→  staffId         String?
+   620→  staff           Staff?   @relation(fields: [staffId], references: [id])
+   621→  role            String?  // for staff codes: RECEPTION | ADMIN | MASTER_ADMIN
+   622→  validFrom       DateTime
+   623→  validUntil      DateTime
+   624→  status          String   @default("ACTIVE") // ACTIVE | USED | EXPIRED | REVOKED
+   625→  attempts        Int      @default(0) // failed validation attempts
+   626→  lastAttemptAt   DateTime?
+   627→  revokedAt       DateTime?
+   628→  revokedBy       String?
+   629→  sessions        GuestSession[]
+   630→  createdAt       DateTime @default(now())
+   631→
+   632→  @@index([codeType])
+   633→  @@index([status])
+   634→  @@index([stayId])
+   635→  @@index([staffId])
+   636→}
+   637→
+   638→// --- Sessions (authenticated app sessions) -----------------------------
+   639→model GuestSession {
+   640→  id              String   @id @default(cuid())
+   641→  tokenHash       String   @unique // SHA-256 of session token
+   642→  codeId          String
+   643→  accessCode      AccessCode @relation(fields: [codeId], references: [id])
+   644→  persona         String   // GUEST | RECEPTION | ADMIN
+   645→  stayId          String?
+   646→  staffId         String?
+   647→  staff           Staff?   @relation(fields: [staffId], references: [id])
+   648→  expiresAt       DateTime
+   649→  revokedAt       DateTime?
+   650→  lastSeenAt      DateTime @default(now())
+   651→  createdAt       DateTime @default(now())
+   652→
+   653→  @@index([codeId])
+   654→  @@index([persona])
+   655→  @@index([expiresAt])
+   656→}
+   657→
+   658→// --- Service catalog ----------------------------------------------------
+   659→model ServiceCategory {
+   660→  id              String   @id @default(cuid())
+   661→  slug            String   @unique
+   662→  nameAr          String
+   663→  nameEn          String
+   664→  iconKey         String?
+   665→  displayOrder    Int      @default(0)
+   666→  services        Service[]
+   667→  createdAt       DateTime @default(now())
+   668→}
+   669→
+   670→model Service {
+   671→  id              String   @id @default(cuid())
+   672→  slug            String   @unique
+   673→  categoryId      String
+   674→  category        ServiceCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+   675→  nameAr          String
+   676→  nameEn          String
+   677→  descriptionAr   String?
+   678→  descriptionEn   String?
+   679→  iconKey         String?
+   680→  isChargeable    Boolean  @default(false)
+   681→  price           Float    @default(0)
+   682→  expectedResponseMinutes Int @default(30)
+   683→  isActive        Boolean  @default(true)
+   684→  displayOrder    Int      @default(0)
+   685→  createdAt       DateTime @default(now())
+   686→
+   687→  @@index([categoryId])
+   688→  @@index([isActive])
+   689→}
+   690→
+   691→// --- Guest service requests -------------------------------------------
+   692→model GuestRequest {
+   693→  id              String   @id @default(cuid())
+   694→  requestNumber   Int      // sequential per hotel
+   695→  stayId          String
+   696→  stay            Stay     @relation(fields: [stayId], references: [id], onDelete: Cascade)
+   697→  guestId         String
+   698→  roomId          String
+   699→  category        String   // housekeeping | maintenance | guest_services | reception | other
+   700→  service         String   // service slug or "custom"
+   701→  title           String
+   702→  description     String?
+   703→  priority        String   @default("NORMAL") // NORMAL | URGENT
+   704→  status          String   @default("NEW") // NEW | ACKNOWLEDGED | ASSIGNED | IN_PROGRESS | WAITING | COMPLETED | CANCELLED | REJECTED
+   705→  assignedTo      String?  // staff name or team
+   706→  preferredTime   String?
+   707→  attachmentUrl   String?
+   708→  relatedChargeId String?
+   709→  completedAt     DateTime?
+   710→  cancelledAt     DateTime?
+   711→  events          GuestRequestEvent[]
+   712→  notifications   AppNotification[]
+   713→  createdAt       DateTime @default(now())
+   714→  updatedAt       DateTime @updatedAt
+   715→
+   716→  @@index([stayId])
+   717→  @@index([status])
+   718→  @@index([priority])
+   719→  @@index([roomId])
+   720→  @@index([createdAt])
+   721→}
+   722→
+   723→model GuestRequestEvent {
+   724→  id              String   @id @default(cuid())
+   725→  requestId       String
+   726→  request         GuestRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+   727→  eventType       String   // CREATED | ACKNOWLEDGED | ASSIGNED | IN_PROGRESS | NOTE | COMPLETED | CANCELLED | REJECTED
+   728→  fromStatus      String?
+   729→  toStatus        String?
+   730→  note            String?
+   731→  performedBy     String   // guest name or staff name
+   732→  performedByRole String   // GUEST | RECEPTION | STAFF | SYSTEM
+   733→  createdAt       DateTime @default(now())
+   734→
+   735→  @@index([requestId])
+   736→  @@index([createdAt])
+   737→}
+   738→
+   739→// --- Billing ledger (charges + payments derived from Payment table) ----
+   740→model Charge {
+   741→  id              String   @id @default(cuid())
+   742→  stayId          String
+   743→  stay            Stay     @relation(fields: [stayId], references: [id], onDelete: Cascade)
+   744→  description     String
+   745→  category        String   // ROOM | SERVICE | EXTRA_BED | LAUNDRY | ROOM_SERVICE | ADJUSTMENT | DISCOUNT | OTHER
+   746→  quantity        Int      @default(1)
+   747→  unitPrice       Float
+   748→  grossAmount     Float
+   749→  discount        Float    @default(0)
+   750→  netAmount       Float
+   751→  tax             Float    @default(0)
+   752→  source          String   @default("MANUAL") // ROOM | SERVICE | MANUAL | ADJUSTMENT
+   753→  relatedRequestId String?
+   754→  createdBy       String   @default("SYSTEM")
+   755→  createdAt       DateTime @default(now())
+   756→
+   757→  @@index([stayId])
+   758→  @@index([category])
+   759→  @@index([createdAt])
+   760→}
+   761→
+   762→// --- Guest-reception conversation --------------------------------------
+   763→model Conversation {
+   764→  id              String   @id @default(cuid())
+   765→  stayId          String
+   766→  stay            Stay     @relation(fields: [stayId], references: [id], onDelete: Cascade)
+   767→  guestId         String
+   768→  roomId          String
+   769→  status          String   @default("OPEN") // OPEN | WAITING | RESOLVED | CLOSED
+   770→  messages        ConversationMessage[]
+   771→  createdAt       DateTime @default(now())
+   772→  updatedAt       DateTime @updatedAt
+   773→
+   774→  @@index([stayId])
+   775→  @@index([status])
+   776→}
+   777→
+   778→model ConversationMessage {
+   779→  id              String   @id @default(cuid())
+   780→  conversationId  String
+   781→  conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+   782→  senderRole      String   // GUEST | RECEPTION | STAFF | SYSTEM
+   783→  senderId        String
+   784→  senderName      String
+   785→  body           String
+   786→  readAt          DateTime?
+   787→  createdAt       DateTime @default(now())
+   788→
+   789→  @@index([conversationId])
+   790→  @@index([createdAt])
+   791→}
+   792→
+   793→// --- Stay change requests (extension / transfer / checkout) -----------
+   794→model ExtensionRequest {
+   795→  id              String   @id @default(cuid())
+   796→  stayId          String
+   797→  stay            Stay     @relation(fields: [stayId], references: [id], onDelete: Cascade)
+   798→  guestId         String
+   799→  currentCheckOut  DateTime
+   800→  requestedCheckOut DateTime
+   801→  additionalNights Int
+   802→  estimatedCost   Float    @default(0)
+   803→  note            String?
+   804→  status          String   @default("PENDING") // PENDING | APPROVED | REJECTED
+   805→  reviewedBy      String?
+   806→  reviewedAt      DateTime?
+   807→  reviewNote      String?
+   808→  createdAt       DateTime @default(now())
+   809→  updatedAt       DateTime @updatedAt
+   810→
+   811→  @@index([stayId])
+   812→  @@index([status])
+   813→}
+   814→
+   815→model RoomTransferRequest {
+   816→  id              String   @id @default(cuid())
+   817→  stayId          String
+   818→  stay            Stay     @relation(fields: [stayId], references: [id], onDelete: Cascade)
+   819→  guestId         String
+   820→  fromRoomId      String
+   821→  fromRoom        PhysicalRoom @relation("TransferFromRoom", fields: [fromRoomId], references: [id])
+   822→  toRoomId        String
+   823→  toRoom          PhysicalRoom @relation("TransferToRoom", fields: [toRoomId], references: [id])
+   824→  reason          String?
+   825→  priceAdjustment Float    @default(0)
+   826→  status          String   @default("PENDING") // PENDING | APPROVED | REJECTED
+   827→  reviewedBy      String?
+   828→  reviewedAt      DateTime?
+   829→  createdAt       DateTime @default(now())
+   830→
+   831→  @@index([stayId])
+   832→  @@index([status])
+   833→}
+   834→
+   835→model CheckoutRequest {
+   836→  id              String   @id @default(cuid())
+   837→  stayId          String
+   838→  stay            Stay     @relation(fields: [stayId], references: [id], onDelete: Cascade)
+   839→  guestId         String
+   840→  status          String   @default("PENDING") // PENDING | COMPLETED | CANCELLED
+   841→  requestedAt     DateTime @default(now())
+   842→  completedAt     DateTime?
+   843→  cancelledAt     DateTime?
+   844→  note            String?
+   845→
+   846→  @@index([stayId])
+   847→  @@index([status])
+   848→}
+   849→
+   850→// --- App notifications (in-app, distinct from email/WhatsApp) ---------
+   851→model AppNotification {
+   852→  id              String   @id @default(cuid())
+   853→  recipientRole    String   // GUEST | RECEPTION | ADMIN
+   854→  recipientId     String   // guestId or staffId
+   855→  stayId          String?
+   856→  requestId       String?
+   857→  request         GuestRequest? @relation(fields: [requestId], references: [id], onDelete: Cascade)
+   858→  title           String
+   859→  body            String
+   860→  type            String   // REQUEST_CREATED | REQUEST_ACKNOWLEDGED | REQUEST_COMPLETED | EXTENSION_APPROVED | CHECKOUT_REMINIDER | NEW_MESSAGE | etc.
+   861→  isRead          Boolean  @default(false)
+   862→  createdAt       DateTime @default(now())
+   863→
+   864→  @@index([recipientRole, recipientId])
+   865→  @@index([isRead])
+   866→  @@index([createdAt])
+   867→}
+   868→

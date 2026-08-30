@@ -1,14 +1,16 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ArrowUp, MessageCircle } from "lucide-react";
+import { ArrowUp, MessageCircle, Smartphone } from "lucide-react";
 import { useHotel } from "@/hooks/use-data";
 import { useUIStore } from "@/stores/ui-store";
+import { useAppStore } from "@/stores/app-store";
 
 export function FloatingActions() {
   const [showTop, setShowTop] = useState(false);
   const { data: hotel } = useHotel();
   const locale = useUIStore((s) => s.locale);
+  const openApp = useAppStore((s) => s.openApp);
 
   useEffect(() => {
     const onScroll = () => setShowTop(window.scrollY > 600);
@@ -35,6 +37,18 @@ export function FloatingActions() {
         aria-label={locale === "ar" ? "العودة للأعلى" : "Back to top"}
       >
         <ArrowUp className="w-5 h-5 group-hover:-translate-y-0.5 transition-transform" />
+      </button>
+
+      {/* Hotel App (Guest / Reception / Admin) */}
+      <button
+        onClick={openApp}
+        className="group relative w-14 h-14 rounded-full bg-gradient-to-br from-emerald-700 to-emerald-800 shadow-lg flex items-center justify-center hover:scale-105 transition-transform border-2 border-amber-400"
+        aria-label={locale === "ar" ? "تطبيق الفندق" : "Hotel App"}
+      >
+        <Smartphone className="w-6 h-6 text-amber-300" />
+        <span className="absolute end-full me-3 top-1/2 -translate-y-1/2 whitespace-nowrap bg-card text-foreground text-xs font-medium px-3 py-1.5 rounded-lg shadow-luxury border border-border opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+          {locale === "ar" ? "تطبيق الفندق" : "Hotel App"}
+        </span>
       </button>
 
       {/* WhatsApp */}

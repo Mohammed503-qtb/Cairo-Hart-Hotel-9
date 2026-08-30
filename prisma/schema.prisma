@@ -97,6 +97,7 @@ model RoomType {
   hotel           Hotel    @relation(fields: [hotelId], references: [id])
 
   reservations    ReservationItem[]
+  physicalRooms  PhysicalRoom[]
 
   @@index([hotelId])
   @@index([isActive])
@@ -348,6 +349,7 @@ model Guest {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   reservations Reservation[]
+  stays       Stay[]
 
   @@index([phone])
   @@index([email])
@@ -390,6 +392,7 @@ model Reservation {
   payments        Payment[]
   modifications   BookingModification[]
   notifications   Notification[]
+  stays           Stay[]
 
   @@index([guestId])
   @@index([status])
@@ -492,4 +495,373 @@ model AuditLog {
 
   @@index([entityType, entityId])
   @@index([action])
+}
+
+// ===========================================================================
+// MOBILE APP DOMAIN — Stays, Physical Rooms, Access Codes, Requests, Billing,
+// Conversations, Staff, Services. See PLAN_ MOBILE-APK.md.
+// Single source of truth shared with the website. App personas (Guest/Reception/Admin)
+// authenticate via dynamic access codes; sessions are tracked in GuestSession.
+// ===========================================================================
+
+// --- Staff (Reception / Admin / Master Admin) ---------------------------
+model Staff {
+  id              String   @id @default(cuid())
+  fullName        String
+  phone           String   @unique
+  email           String?
+  role            String   @default("RECEPTION") // RECEPTION | ADMIN | MASTER_ADMIN
+  isActive        Boolean  @default(true)
+  accessCodes     AccessCode[]
+  sessions        GuestSession[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([role])
+}
+
+// --- Physical rooms (room numbers) --------------------------------------
+model PhysicalRoom {
+  id              String   @id @default(cuid())
+  roomNumber      String   @unique // e.g. "101"
+  floor           Int
+  roomTypeId      String
+  roomType        RoomType @relation(fields: [roomTypeId], references: [id])
+  status          String   @default("AVAILABLE") // AVAILABLE | RESERVED | OCCUPIED | DIRTY | CLEANING | CLEAN | INSPECTED | OUT_OF_ORDER | OUT_OF_SERVICE
+  notes           String?
+  stays           Stay[]
+  transfersFrom   RoomTransferRequest[] @relation("TransferFromRoom")
+  transfersTo     RoomTransferRequest[] @relation("TransferToRoom")
+  statusHistory   RoomStatusHistory[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([floor])
+  @@index([status])
+  @@index([roomTypeId])
+}
+
+model RoomStatusHistory {
+  id              String   @id @default(cuid())
+  roomId          String
+  room            PhysicalRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  fromStatus      String?
+  toStatus        String
+  reason          String?
+  changedBy       String   @default("SYSTEM")
+  createdAt       DateTime @default(now())
+
+  @@index([roomId])
+}
+
+// --- Stay (active hotel occupancy after check-in) ----------------------
+model Stay {
+  id              String   @id @default(cuid())
+  stayNumber      String   @unique // ST-YYYY-NNNNNN
+  reservationId   String?
+  reservation     Reservation? @relation(fields: [reservationId], references: [id])
+  guestId         String
+  guest           Guest    @relation(fields: [guestId], references: [id])
+  roomId          String
+  room            PhysicalRoom @relation(fields: [roomId], references: [id])
+  hotelId         String
+  checkIn         DateTime
+  checkOut        DateTime
+  nights          Int
+  adults          Int      @default(1)
+  children        Int      @default(0)
+  status          String   @default("EXPECTED") // EXPECTED | CHECKED_IN | CHECKED_OUT | CLOSED
+  balance         Float    @default(0)
+  notes           String?
+  checkedInAt     DateTime?
+  checkedOutAt    DateTime?
+  closedAt        DateTime?
+  accessCodes     AccessCode[]
+  requests        GuestRequest[]
+  charges         Charge[]
+  conversations   Conversation[]
+  extensionReqs   ExtensionRequest[]
+  transferReqs    RoomTransferRequest[]
+  checkoutReqs    CheckoutRequest[]
+  statusHistory   StayStatusHistory[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([guestId])
+  @@index([roomId])
+  @@index([status])
+  @@index([checkIn])
+  @@index([hotelId])
+}
+
+model StayStatusHistory {
+  id              String   @id @default(cuid())
+  stayId          String
+  stay            Stay     @relation(fields: [stayId], references: [id], onDelete: Cascade)
+  fromStatus      String?
+  toStatus        String
+  reason          String?
+  changedBy       String   @default("SYSTEM")
+  createdAt       DateTime @default(now())
+
+  @@index([stayId])
+}
+
+// --- Access codes (Guest / Reception / Admin) ---------------------------
+model AccessCode {
+  id              String   @id @default(cuid())
+  codeHash        String   @unique // SHA-256 hex of raw code
+  codeType        String   // GUEST | RECEPTION | ADMIN
+  // GUEST: stayId + guestId + roomId bound; RECEPTION/ADMIN: staffId bound
+  stayId          String?
+  stay            Stay?    @relation(fields: [stayId], references: [id])
+  guestId         String?
+  staffId         String?
+  staff           Staff?   @relation(fields: [staffId], references: [id])
+  role            String?  // for staff codes: RECEPTION | ADMIN | MASTER_ADMIN
+  validFrom       DateTime
+  validUntil      DateTime
+  status          String   @default("ACTIVE") // ACTIVE | USED | EXPIRED | REVOKED
+  attempts        Int      @default(0) // failed validation attempts
+  lastAttemptAt   DateTime?
+  revokedAt       DateTime?
+  revokedBy       String?
+  sessions        GuestSession[]
+  createdAt       DateTime @default(now())
+
+  @@index([codeType])
+  @@index([status])
+  @@index([stayId])
+  @@index([staffId])
+}
+
+// --- Sessions (authenticated app sessions) -----------------------------
+model GuestSession {
+  id              String   @id @default(cuid())
+  tokenHash       String   @unique // SHA-256 of session token
+  codeId          String
+  accessCode      AccessCode @relation(fields: [codeId], references: [id])
+  persona         String   // GUEST | RECEPTION | ADMIN
+  stayId          String?
+  staffId         String?
+  staff           Staff?   @relation(fields: [staffId], references: [id])
+  expiresAt       DateTime
+  revokedAt       DateTime?
+  lastSeenAt      DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  @@index([codeId])
+  @@index([persona])
+  @@index([expiresAt])
+}
+
+// --- Service catalog ----------------------------------------------------
+model ServiceCategory {
+  id              String   @id @default(cuid())
+  slug            String   @unique
+  nameAr          String
+  nameEn          String
+  iconKey         String?
+  displayOrder    Int      @default(0)
+  services        Service[]
+  createdAt       DateTime @default(now())
+}
+
+model Service {
+  id              String   @id @default(cuid())
+  slug            String   @unique
+  categoryId      String
+  category        ServiceCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  nameAr          String
+  nameEn          String
+  descriptionAr   String?
+  descriptionEn   String?
+  iconKey         String?
+  isChargeable    Boolean  @default(false)
+  price           Float    @default(0)
+  expectedResponseMinutes Int @default(30)
+  isActive        Boolean  @default(true)
+  displayOrder    Int      @default(0)
+  createdAt       DateTime @default(now())
+
+  @@index([categoryId])
+  @@index([isActive])
+}
+
+// --- Guest service requests -------------------------------------------
+model GuestRequest {
+  id              String   @id @default(cuid())
+  requestNumber   Int      // sequential per hotel
+  stayId          String
+  stay            Stay     @relation(fields: [stayId], references: [id], onDelete: Cascade)
+  guestId         String
+  roomId          String
+  category        String   // housekeeping | maintenance | guest_services | reception | other
+  service         String   // service slug or "custom"
+  title           String
+  description     String?
+  priority        String   @default("NORMAL") // NORMAL | URGENT
+  status          String   @default("NEW") // NEW | ACKNOWLEDGED | ASSIGNED | IN_PROGRESS | WAITING | COMPLETED | CANCELLED | REJECTED
+  assignedTo      String?  // staff name or team
+  preferredTime   String?
+  attachmentUrl   String?
+  relatedChargeId String?
+  completedAt     DateTime?
+  cancelledAt     DateTime?
+  events          GuestRequestEvent[]
+  notifications   AppNotification[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([stayId])
+  @@index([status])
+  @@index([priority])
+  @@index([roomId])
+  @@index([createdAt])
+}
+
+model GuestRequestEvent {
+  id              String   @id @default(cuid())
+  requestId       String
+  request         GuestRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  eventType       String   // CREATED | ACKNOWLEDGED | ASSIGNED | IN_PROGRESS | NOTE | COMPLETED | CANCELLED | REJECTED
+  fromStatus      String?
+  toStatus        String?
+  note            String?
+  performedBy     String   // guest name or staff name
+  performedByRole String   // GUEST | RECEPTION | STAFF | SYSTEM
+  createdAt       DateTime @default(now())
+
+  @@index([requestId])
+  @@index([createdAt])
+}
+
+// --- Billing ledger (charges + payments derived from Payment table) ----
+model Charge {
+  id              String   @id @default(cuid())
+  stayId          String
+  stay            Stay     @relation(fields: [stayId], references: [id], onDelete: Cascade)
+  description     String
+  category        String   // ROOM | SERVICE | EXTRA_BED | LAUNDRY | ROOM_SERVICE | ADJUSTMENT | DISCOUNT | OTHER
+  quantity        Int      @default(1)
+  unitPrice       Float
+  grossAmount     Float
+  discount        Float    @default(0)
+  netAmount       Float
+  tax             Float    @default(0)
+  source          String   @default("MANUAL") // ROOM | SERVICE | MANUAL | ADJUSTMENT
+  relatedRequestId String?
+  createdBy       String   @default("SYSTEM")
+  createdAt       DateTime @default(now())
+
+  @@index([stayId])
+  @@index([category])
+  @@index([createdAt])
+}
+
+// --- Guest-reception conversation --------------------------------------
+model Conversation {
+  id              String   @id @default(cuid())
+  stayId          String
+  stay            Stay     @relation(fields: [stayId], references: [id], onDelete: Cascade)
+  guestId         String
+  roomId          String
+  status          String   @default("OPEN") // OPEN | WAITING | RESOLVED | CLOSED
+  messages        ConversationMessage[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([stayId])
+  @@index([status])
+}
+
+model ConversationMessage {
+  id              String   @id @default(cuid())
+  conversationId  String
+  conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderRole      String   // GUEST | RECEPTION | STAFF | SYSTEM
+  senderId        String
+  senderName      String
+  body           String
+  readAt          DateTime?
+  createdAt       DateTime @default(now())
+
+  @@index([conversationId])
+  @@index([createdAt])
+}
+
+// --- Stay change requests (extension / transfer / checkout) -----------
+model ExtensionRequest {
+  id              String   @id @default(cuid())
+  stayId          String
+  stay            Stay     @relation(fields: [stayId], references: [id], onDelete: Cascade)
+  guestId         String
+  currentCheckOut  DateTime
+  requestedCheckOut DateTime
+  additionalNights Int
+  estimatedCost   Float    @default(0)
+  note            String?
+  status          String   @default("PENDING") // PENDING | APPROVED | REJECTED
+  reviewedBy      String?
+  reviewedAt      DateTime?
+  reviewNote      String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([stayId])
+  @@index([status])
+}
+
+model RoomTransferRequest {
+  id              String   @id @default(cuid())
+  stayId          String
+  stay            Stay     @relation(fields: [stayId], references: [id], onDelete: Cascade)
+  guestId         String
+  fromRoomId      String
+  fromRoom        PhysicalRoom @relation("TransferFromRoom", fields: [fromRoomId], references: [id])
+  toRoomId        String
+  toRoom          PhysicalRoom @relation("TransferToRoom", fields: [toRoomId], references: [id])
+  reason          String?
+  priceAdjustment Float    @default(0)
+  status          String   @default("PENDING") // PENDING | APPROVED | REJECTED
+  reviewedBy      String?
+  reviewedAt      DateTime?
+  createdAt       DateTime @default(now())
+
+  @@index([stayId])
+  @@index([status])
+}
+
+model CheckoutRequest {
+  id              String   @id @default(cuid())
+  stayId          String
+  stay            Stay     @relation(fields: [stayId], references: [id], onDelete: Cascade)
+  guestId         String
+  status          String   @default("PENDING") // PENDING | COMPLETED | CANCELLED
+  requestedAt     DateTime @default(now())
+  completedAt     DateTime?
+  cancelledAt     DateTime?
+  note            String?
+
+  @@index([stayId])
+  @@index([status])
+}
+
+// --- App notifications (in-app, distinct from email/WhatsApp) ---------
+model AppNotification {
+  id              String   @id @default(cuid())
+  recipientRole    String   // GUEST | RECEPTION | ADMIN
+  recipientId     String   // guestId or staffId
+  stayId          String?
+  requestId       String?
+  request         GuestRequest? @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  title           String
+  body            String
+  type            String   // REQUEST_CREATED | REQUEST_ACKNOWLEDGED | REQUEST_COMPLETED | EXTENSION_APPROVED | CHECKOUT_REMINIDER | NEW_MESSAGE | etc.
+  isRead          Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  @@index([recipientRole, recipientId])
+  @@index([isRead])
+  @@index([createdAt])
 }
