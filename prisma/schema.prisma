@@ -1,0 +1,495 @@
+// Hotel Website + Booking Engine — Domain Schema
+// Single SQLite database, website-only scope per PLAN_WEBSITE.md
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Hotel configuration (single active record)
+// ---------------------------------------------------------------------------
+model Hotel {
+  id              String   @id @default(cuid())
+  slug            String   @unique @default("default")
+  nameAr          String
+  nameEn          String
+  taglineAr       String
+  taglineEn       String
+  descriptionAr   String
+  descriptionEn   String
+  storyAr         String?
+  storyEn         String?
+  phone           String
+  whatsapp        String?
+  email           String
+  addressAr       String
+  addressEn       String
+  cityAr          String
+  cityEn          String
+  countryAr       String
+  countryEn       String
+  latitude        Float?
+  longitude       Float?
+  checkInTime     String   @default("14:00")
+  checkOutTime    String   @default("12:00")
+  currency        String   @default("YER")
+  timezone        String   @default("Asia/Aden")
+  defaultLanguage String   @default("ar")
+  logoUrl         String?
+  heroImageUrl    String?
+  bookingHorizonDays Int   @default(365)
+  minStayNights   Int      @default(1)
+  maxStayNights   Int      @default(30)
+  maxAdultsPerRoom Int     @default(4)
+  maxChildrenPerRoom Int   @default(3)
+  taxRatePercent  Float    @default(5.0) // service tax
+  serviceChargePercent Float @default(2.0)
+  whatsappEnabled Boolean  @default(false)
+  emailEnabled    Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  roomTypes       RoomType[]
+  facilities      Facility[]
+  galleryItems    GalleryItem[]
+  offers          Offer[]
+  policies        Policy[]
+  faqs            Faq[]
+  reviews         Review[]
+}
+
+// ---------------------------------------------------------------------------
+// Rooms
+// ---------------------------------------------------------------------------
+model RoomType {
+  id              String   @id @default(cuid())
+  slug            String   @unique
+  nameAr          String
+  nameEn          String
+  descriptionAr   String
+  descriptionEn   String
+  shortDescriptionAr String
+  shortDescriptionEn String
+  basePrice       Float    // per night, base currency
+  sizeSqm         Float?
+  bedConfigAr     String
+  bedConfigEn     String
+  maxAdults       Int      @default(2)
+  maxChildren     Int      @default(2)
+  totalInventory  Int      @default(1) // number of physical rooms of this type
+  imageUrl        String
+  images          RoomTypeImage[]
+  amenities       RoomTypeAmenity[]
+  ratePlanId      String?
+  ratePlan        RatePlan? @relation(fields: [ratePlanId], references: [id])
+  seasonalRates   SeasonalRate[]
+  isActive        Boolean  @default(true)
+  isFeatured      Boolean  @default(false)
+  displayOrder    Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  hotelId         String
+  hotel           Hotel    @relation(fields: [hotelId], references: [id])
+
+  reservations    ReservationItem[]
+
+  @@index([hotelId])
+  @@index([isActive])
+}
+
+model RoomTypeImage {
+  id          String   @id @default(cuid())
+  roomTypeId  String
+  roomType    RoomType @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+  url         String
+  altAr       String?
+  altEn       String?
+  displayOrder Int     @default(0)
+  createdAt   DateTime @default(now())
+
+  @@index([roomTypeId])
+}
+
+model Amenity {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  nameAr      String
+  nameEn      String
+  iconKey     String?
+  roomTypes   RoomTypeAmenity[]
+}
+
+model RoomTypeAmenity {
+  roomTypeId  String
+  amenityId   String
+  roomType    RoomType @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+  amenity     Amenity  @relation(fields: [amenityId], references: [id], onDelete: Cascade)
+
+  @@id([roomTypeId, amenityId])
+}
+
+// ---------------------------------------------------------------------------
+// Rate plans
+// ---------------------------------------------------------------------------
+model RatePlan {
+  id              String   @id @default(cuid())
+  nameAr          String
+  nameEn          String
+  descriptionAr   String?
+  descriptionEn   String?
+  isRefundable    Boolean  @default(true)
+  cancellationDays Int    @default(3) // free cancellation if X days before check-in
+  prepayPercent   Float    @default(0) // 0 = pay at hotel, 100 = prepay, 50 = deposit
+  isActive        Boolean  @default(true)
+  roomTypes       RoomType[]
+  seasonalRates   SeasonalRate[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// Seasonal / weekend rate adjustments — applied on top of base price
+model SeasonalRate {
+  id              String   @id @default(cuid())
+  nameAr          String
+  nameEn          String
+  roomTypeId      String?  // null = applies to all room types
+  roomType        RoomType? @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+  ratePlanId      String?  // null = applies to all rate plans
+  ratePlan        RatePlan? @relation(fields: [ratePlanId], references: [id], onDelete: Cascade)
+  startDate       DateTime // season start (inclusive)
+  endDate         DateTime // season end (inclusive)
+  adjustmentType  String   @default("PERCENTAGE") // PERCENTAGE or FIXED
+  adjustmentValue Float    // e.g. 20 = +20%, -10 = -10%, or fixed amount
+  // Weekend surcharge (applied on Fri/Sat for Yemen weekend)
+  weekendAdjustmentType String? // PERCENTAGE or FIXED
+  weekendAdjustmentValue Float?
+  weekendDays     String   @default("5,6") // 0=Sun,5=Fri,6=Sat (comma-separated)
+  isActive        Boolean  @default(true)
+  priority        Int      @default(0) // higher priority wins when overlapping
+  minStayNights   Int?     // optional: override hotel min stay during this season
+  maxStayNights   Int?     // optional: override hotel max stay during this season
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([roomTypeId])
+  @@index([ratePlanId])
+  @@index([startDate, endDate])
+  @@index([isActive])
+}
+
+// ---------------------------------------------------------------------------
+// Facilities / Gallery / Offers / Policies / FAQ
+// ---------------------------------------------------------------------------
+model Facility {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  nameAr      String
+  nameEn      String
+  descriptionAr String
+  descriptionEn String
+  imageUrl    String?
+  hoursAr     String?
+  hoursEn     String?
+  iconKey     String?
+  isActive    Boolean  @default(true)
+  displayOrder Int     @default(0)
+  hotelId     String
+  hotel       Hotel    @relation(fields: [hotelId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([hotelId])
+}
+
+model GalleryItem {
+  id          String   @id @default(cuid())
+  url         String
+  altAr       String
+  altEn       String
+  category    String   @default("general") // exterior, rooms, facilities, surroundings
+  captionAr   String?
+  captionEn   String?
+  displayOrder Int     @default(0)
+  hotelId     String
+  hotel       Hotel    @relation(fields: [hotelId], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@index([hotelId])
+  @@index([category])
+}
+
+model Offer {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  titleAr     String
+  titleEn     String
+  descriptionAr String
+  descriptionEn String
+  imageUrl    String?
+  discountPercent Float?
+  validFrom   DateTime
+  validTo     DateTime
+  isActive    Boolean  @default(true)
+  termsAr     String?
+  termsEn     String?
+  hotelId     String
+  hotel       Hotel    @relation(fields: [hotelId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([hotelId])
+  @@index([isActive])
+}
+
+model Policy {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  category    String   // checkin, checkout, cancellation, noshow, payment, children, smoking, pets, etc.
+  titleAr     String
+  titleEn     String
+  bodyAr      String
+  bodyEn      String
+  displayOrder Int     @default(0)
+  hotelId     String
+  hotel       Hotel    @relation(fields: [hotelId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([hotelId])
+  @@index([category])
+}
+
+model Faq {
+  id          String   @id @default(cuid())
+  category    String   @default("general")
+  questionAr  String
+  questionEn  String
+  answerAr    String
+  answerEn    String
+  displayOrder Int     @default(0)
+  hotelId     String
+  hotel       Hotel    @relation(fields: [hotelId], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@index([hotelId])
+  @@index([category])
+}
+
+model Review {
+  id          String   @id @default(cuid())
+  guestName   String
+  guestCountry String  @default("YE")
+  roomTypeSlug String? // optional link to a room type
+  rating      Float    // 1-5, supports half stars
+  titleAr     String?
+  titleEn     String?
+  bodyAr      String
+  bodyEn      String
+  stayDate    DateTime? // month/year of guest's stay
+  isPublished Boolean  @default(true)
+  isFeatured  Boolean  @default(true)
+  source      String   @default("WEBSITE") // WEBSITE, BOOKING_COM, GOOGLE
+  displayOrder Int     @default(0)
+  hotelId     String
+  hotel       Hotel    @relation(fields: [hotelId], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@index([hotelId])
+  @@index([isFeatured])
+  @@index([isPublished])
+}
+
+model Newsletter {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  name        String?
+  locale      String   @default("ar")
+  isActive    Boolean  @default(true)
+  confirmedAt DateTime? // null until user confirms via email link
+  unsubscribedAt DateTime?
+  source      String   @default("WEBSITE_FOOTER")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model PromoCode {
+  id              String   @id @default(cuid())
+  code            String   @unique
+  nameAr          String
+  nameEn          String
+  descriptionAr   String?
+  descriptionEn   String?
+  discountType    String   @default("PERCENTAGE") // PERCENTAGE or FIXED
+  discountValue   Float    // e.g. 15 = 15% off, or 5000 = 5000 YER off
+  maxUses         Int      @default(100) // 0 = unlimited
+  usedCount       Int      @default(0)
+  validFrom       DateTime
+  validTo         DateTime
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Guests & Reservations
+// ---------------------------------------------------------------------------
+model Guest {
+  id          String   @id @default(cuid())
+  fullName    String
+  phone       String
+  email       String?
+  countryCode String   @default("+967")
+  whatsapp    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  reservations Reservation[]
+
+  @@index([phone])
+  @@index([email])
+}
+
+model Reservation {
+  id              String   @id @default(cuid())
+  bookingReference String  @unique
+  hotelId         String
+  guestId        String
+  guest           Guest    @relation(fields: [guestId], references: [id])
+  status          String   @default("PENDING") // PENDING, CONFIRMED, PAYMENT_PENDING, CANCELLED, FAILED, EXPIRED, NO_SHOW
+  source          String   @default("WEBSITE")
+  checkIn         DateTime
+  checkOut        DateTime
+  nights          Int
+  adults          Int      @default(1)
+  children        Int      @default(0)
+  rooms           Int      @default(1)
+  currency        String   @default("YER")
+  subtotal        Float
+  discountTotal   Float    @default(0)
+  taxTotal        Float    @default(0)
+  serviceChargeTotal Float @default(0)
+  grandTotal      Float
+  paidTotal       Float    @default(0)
+  paymentStatus   String   @default("UNPAID") // UNPAID, PARTIAL, PAID, REFUNDED
+  paymentMethod   String?  // PAY_AT_HOTEL, PAY_ONLINE, DEPOSIT
+  specialRequest  String?
+  policySnapshot  String   // JSON snapshot of relevant policies at booking time
+  idempotencyKey  String?  @unique
+  confirmedAt     DateTime?
+  cancelledAt     DateTime?
+  cancellationReason String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  items           ReservationItem[]
+  priceSnapshot   ReservationPriceSnapshot[]
+  payments        Payment[]
+  modifications   BookingModification[]
+  notifications   Notification[]
+
+  @@index([guestId])
+  @@index([status])
+  @@index([checkIn])
+  @@index([bookingReference])
+}
+
+model ReservationItem {
+  id              String   @id @default(cuid())
+  reservationId   String
+  reservation     Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  roomTypeId      String
+  roomType        RoomType @relation(fields: [roomTypeId], references: [id])
+  quantity        Int      @default(1)
+  checkIn         DateTime
+  checkOut         DateTime
+  nights          Int
+  nightlyRate     Float
+  subtotal        Float
+
+  @@index([reservationId])
+  @@index([roomTypeId])
+}
+
+model ReservationPriceSnapshot {
+  id              String   @id @default(cuid())
+  reservationId   String
+  reservation     Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  nightDate       DateTime
+  roomTypeId      String
+  baseRate        Float
+  discount        Float    @default(0)
+  tax             Float    @default(0)
+  serviceCharge   Float    @default(0)
+  total           Float
+  currency        String
+
+  @@index([reservationId])
+}
+
+model Payment {
+  id              String   @id @default(cuid())
+  reservationId   String
+  reservation     Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  provider        String   @default("manual") // manual, stripe (future), etc.
+  method          String   // PAY_AT_HOTEL, PAY_ONLINE, DEPOSIT
+  amount          Float
+  currency        String
+  status          String   @default("PENDING") // PENDING, SUCCEEDED, FAILED, REFUNDED
+  providerReference String?
+  idempotencyKey  String?  @unique
+  createdAt       DateTime @default(now())
+  completedAt     DateTime?
+  failedAt        DateTime?
+
+  @@index([reservationId])
+  @@index([status])
+}
+
+model BookingModification {
+  id              String   @id @default(cuid())
+  reservationId   String
+  reservation     Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  changeType      String   // DATES, GUESTS, ROOM_TYPE, CONTACT, CANCEL
+  previousValue   String   // JSON
+  newValue        String   // JSON
+  reason          String?
+  performedBy     String   @default("GUEST")
+  createdAt       DateTime @default(now())
+
+  @@index([reservationId])
+}
+
+model Notification {
+  id              String   @id @default(cuid())
+  reservationId   String
+  reservation     Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  channel         String   // WHATSAPP, EMAIL
+  type            String   // BOOKING_CONFIRMED, BOOKING_CANCELLED, BOOKING_MODIFIED
+  status          String   @default("PENDING") // PENDING, SENT, FAILED
+  recipient       String
+  content         String
+  providerReference String?
+  attemptCount    Int      @default(0)
+  createdAt       DateTime @default(now())
+  sentAt          DateTime?
+  failedAt        DateTime?
+
+  @@index([reservationId])
+}
+
+model AuditLog {
+  id              String   @id @default(cuid())
+  action          String
+  entityType      String
+  entityId        String
+  performedBy     String   @default("SYSTEM")
+  details         String   // JSON
+  createdAt       DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([action])
+}
