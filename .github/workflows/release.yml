@@ -22,7 +22,7 @@ permissions:
 
 env:
   NODE_VERSION: "20"
-  BUN_VERSION: "1.1"
+  BUN_VERSION: "latest"
 
 jobs:
   build:
