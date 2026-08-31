@@ -26,9 +26,10 @@ type TabKey = "dashboard" | "arrivals" | "inhouse" | "requests";
 interface Props {
   onLogout: () => void;
   onClose: () => void;
+  standalone?: boolean;
 }
 
-export function ReceptionApp({ onLogout, onClose }: Props) {
+export function ReceptionApp({ onLogout, onClose, standalone = false }: Props) {
   const locale = (useUIStore((s) => s.locale) as "ar" | "en") || "ar";
   const isRTL = locale === "ar";
   const session = useAppStore((s) => s.session);
@@ -76,13 +77,15 @@ export function ReceptionApp({ onLogout, onClose }: Props) {
           >
             <LogOut className="w-5 h-5 rtl:rotate-180" />
           </button>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-lg hover:bg-white/10 transition"
-            aria-label={t("closeApp", locale)}
-          >
-            <X className="w-5 h-5" />
-          </button>
+          {!standalone && (
+            <button
+              onClick={onClose}
+              className="p-2 rounded-lg hover:bg-white/10 transition"
+              aria-label={t("closeApp", locale)}
+            >
+              <X className="w-5 h-5" />
+            </button>
+          )}
         </div>
       </header>
 

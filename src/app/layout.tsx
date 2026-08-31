@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Cairo, Playfair_Display, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
@@ -39,6 +39,19 @@ export const metadata: Metadata = {
     "hotel booking Aden",
   ],
   authors: [{ name: "Dar Al-Yasmin Royal Hotel" }],
+  manifest: "/manifest.json",
+  applicationName: "Dar Al-Yasmin Hotel",
+  appleWebApp: {
+    capable: true,
+    title: "Dar Al-Yasmin Hotel",
+    statusBarStyle: "black-translucent",
+    startupImage: ["/icons/apple-touch-icon.png"],
+  },
+  formatDetection: {
+    telephone: true,
+    address: false,
+    email: false,
+  },
   openGraph: {
     title: "فندق دار الياسمين الملكي | Dar Al-Yasmin Royal Hotel",
     description: "إقامة فاخرة على ساحل عدن. Luxury stay on the Aden coast.",
@@ -55,6 +68,27 @@ export const metadata: Metadata = {
     index: true,
     follow: true,
   },
+  icons: {
+    icon: [
+      { url: "/icons/favicon-16.png", sizes: "16x16", type: "image/png" },
+      { url: "/icons/favicon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+    ],
+    apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+    shortcut: ["/favicon.ico"],
+  },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  userScalable: true,
+  viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#1a4d3e" },
+    { media: "(prefers-color-scheme: dark)", color: "#0f3d2e" },
+  ],
 };
 
 export default function RootLayout({

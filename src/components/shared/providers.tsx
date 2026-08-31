@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useUIStore } from "@/stores/ui-store";
 import { isRTL } from "@/lib/i18n";
+import { PWARegister } from "@/components/app/pwa-register";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const locale = useUIStore((s) => s.locale);
@@ -37,6 +38,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
+        <PWARegister />
         {children}
       </ThemeProvider>
     </QueryClientProvider>
