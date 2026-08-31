@@ -239,9 +239,10 @@ jobs:
     needs: [build, docker]
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     steps:
-      - name: Download all artifacts
+      - name: Download standalone bundle artifact
         uses: actions/download-artifact@v4
         with:
+          name: standalone-bundle
           path: artifacts
 
       - name: List artifacts
@@ -260,6 +261,7 @@ jobs:
             ### 📦 Standalone Server Bundle
             - `dar-al-yasmin-*.tar.gz` / `dar-al-yasmin-*.zip` — self-contained Next.js production server
             - Includes: Prisma schema, seed scripts, all static assets, standalone Node server
+            - Run with: `tar -xzf dar-al-yasmin-*.tar.gz && cd server && cp .env.example .env && bun server.js`
 
             ### 🐳 Docker Image
             ```bash
@@ -287,15 +289,10 @@ jobs:
             bun server.js
             ```
 
-            ## Test Access Codes (after seeding)
-            - Guest: see seed output
-            - Reception: see seed output
-            - Admin: see seed output
-
             ## Features
             - 🏨 Public website + booking engine (Arabic RTL + English)
             - 📱 Mobile app for 3 personas (Guest / Reception / Admin)
-            - 🔐 Dynamic code-based authentication
+            - 🔐 Dynamic code-based authentication (H/R/A prefixes)
             - 💳 Booking lifecycle (create → modify → cancel → confirm)
             - 🛎️ Guest service requests with status workflow
             - 💬 Guest-reception chat
@@ -304,7 +301,9 @@ jobs:
             - 📴 Offline-capable (service worker)
             - 📲 Installable as native app (PWA manifest + icons)
           files: |
-            artifacts/standalone-bundle/*
+            artifacts/dar-al-yasmin-*.tar.gz
+            artifacts/dar-al-yasmin-*.zip
+            artifacts/checksums.sha256
             artifacts/twa-apk/*.apk
           draft: false
           prerelease: false
