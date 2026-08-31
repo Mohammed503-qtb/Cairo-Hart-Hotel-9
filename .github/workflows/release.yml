@@ -46,6 +46,17 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
+      - name: Compute version
+        id: meta
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            VERSION="${GITHUB_REF_NAME}"
+          else
+            VERSION="${{ github.event.inputs.version || 'v0.0.0' }}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Computed version: $VERSION"
+
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
@@ -64,23 +75,23 @@ jobs:
           cp -r .next/standalone bundle/server
           cp -r .next/static bundle/server/.next/static
           cp -r public bundle/server/public
-          # Include prisma schema + migrations for runtime
+          # Include prisma schema for runtime
           mkdir -p bundle/server/prisma
           cp prisma/schema.prisma bundle/server/prisma/
           # Include seed scripts
-          cp -r src/lib/seed.ts bundle/server/seed.ts 2>/dev/null || true
-          cp -r src/lib/seed-app.ts bundle/server/seed-app.ts 2>/dev/null || true
+          cp src/lib/seed.ts bundle/server/seed.ts 2>/dev/null || true
+          cp src/lib/seed-app.ts bundle/server/seed-app.ts 2>/dev/null || true
           # Create the runtime db directory
           mkdir -p bundle/server/db
           # Env template
-          cat > bundle/server/.env.example << 'EOF'
+          cat > bundle/server/.env.example << 'ENVEOF'
           DATABASE_URL="file:./db/custom.db"
           NODE_ENV=production
           PORT=3000
           HOSTNAME=0.0.0.0
-          EOF
+          ENVEOF
           # README
-          cat > bundle/README.md << 'EOF'
+          cat > bundle/README.md << 'READMEEOF'
           # Dar Al-Yasmin Royal Hotel — Production Bundle
 
           ## Run
@@ -97,16 +108,19 @@ jobs:
           bun server.js
           ```
           The app listens on port 3000.
-          EOF
+          READMEEOF
 
       - name: Create distributable archives
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
         run: |
-          VERSION="${{ steps.meta.outputs.version || github.ref_name }}"
           # tar.gz
           tar -czf dar-al-yasmin-${VERSION}.tar.gz -C bundle .
           # zip
           cd bundle && zip -r ../dar-al-yasmin-${VERSION}.zip . && cd ..
           ls -lh dar-al-yasmin-${VERSION}.*
+          sha256sum dar-al-yasmin-${VERSION}.tar.gz dar-al-yasmin-${VERSION}.zip > checksums.sha256
+          cat checksums.sha256
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
@@ -115,15 +129,8 @@ jobs:
           path: |
             dar-al-yasmin-*.tar.gz
             dar-al-yasmin-*.zip
+            checksums.sha256
           retention-days: 30
-
-      - name: Generate checksums
-        id: meta
-        run: |
-          VERSION="${GITHUB_REF_NAME:-${{ github.event.inputs.version || 'v0.0.0' }}}"
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          sha256sum dar-al-yasmin-*.tar.gz dar-al-yasmin-*.zip > checksums.sha256
-          cat checksums.sha256
 
   docker:
     name: Build Docker image
