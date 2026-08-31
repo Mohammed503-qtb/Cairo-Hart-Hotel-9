@@ -20,13 +20,14 @@ COPY . .
 RUN bunx prisma generate
 
 # Initialize database + seed (website + app)
+# Set DATABASE_URL inline so prisma can read it during the RUN step
+ENV DATABASE_URL="file:./db/custom.db"
 RUN mkdir -p db && \
     bunx prisma db push --accept-data-loss && \
     (bunx tsx src/lib/seed.ts || true) && \
     (bunx tsx src/lib/seed-app.ts || true)
 
 # Build Next.js (standalone output)
-ENV DATABASE_URL="file:./db/custom.db"
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN bun run build
 
